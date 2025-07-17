@@ -6,6 +6,7 @@ import json
 from datetime import date, datetime
 import cv2
 import torch
+from modules.profiler import register_thread, profile_predict
 from loguru import logger
 from ultralytics import YOLO
 from deep_sort_realtime.deepsort_tracker import DeepSort
@@ -222,6 +223,7 @@ class PersonTracker:
 
     def capture_loop(self):
         failures = 0
+        register_thread(f"Tracker-{self.cam_id}-capture")
         while self.running:
             try:
                 cap = self._open_capture()
@@ -301,6 +303,7 @@ class PersonTracker:
 
     def process_loop(self):
         idx = 0
+        register_thread(f"Tracker-{self.cam_id}-process")
         while self.running or not self.frame_queue.empty():
             try:
                 frame = self.frame_queue.get(timeout=1)
@@ -330,7 +333,7 @@ class PersonTracker:
                 logger.info("Daily counts reset")
             if self.skip_frames and idx % self.skip_frames:
                 continue
-            res = self.model_person.predict(frame, device=self.device, verbose=False)[0]
+            res = profile_predict(self.model_person, f"Tracker-{self.cam_id}", frame, device=self.device, verbose=False)[0]
             h, w = frame.shape[:2]
             if self.line_orientation == 'horizontal':
                 line_pos = int(h * self.line_ratio)
