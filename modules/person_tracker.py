@@ -1,3 +1,4 @@
+#person_tracker.py
 from __future__ import annotations
 import queue
 import threading
@@ -5,7 +6,9 @@ import time
 import json
 from datetime import date, datetime
 import cv2
+from .ffmpeg_stream import FFmpegCameraStream
 import torch
+from modules.profiler import register_thread, profile_predict
 from loguru import logger
 from ultralytics import YOLO
 from deep_sort_realtime.deepsort_tracker import DeepSort
@@ -172,35 +175,20 @@ class PersonTracker:
 
 
     def _open_capture(self):
-        """Return a capture object or FFmpeg process stdout for RTSP streams."""
-        if self.src_type == "rtsp" and self.duplicate_filter_enabled:
-            import subprocess, shlex
-            res_map = {"480p": "640x480", "720p": "1280x720", "1080p": "1920x1080"}
-            size = res_map.get(self.resolution)
-            cmd = [
-                "ffmpeg",
-                "-rtsp_transport",
-                "tcp",
-                "-i",
-                self.src,
-                "-vf",
-                "mpdecimate,setpts=N/FRAME_RATE/TB",
-            ]
-            if size:
-                cmd += ["-s", size]
-            cmd += ["-f", "rawvideo", "-pix_fmt", "bgr24", "-"]
-            logger.info("Starting ffmpeg: %s", " ".join(shlex.quote(c) for c in cmd))
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                bufsize=10 ** 8,
-            )
-            return proc
-        if self.src_type == "rtsp":
-            cap = cv2.VideoCapture(self.src, cv2.CAP_FFMPEG)
-            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        elif self.src_type == "local":
+        """Return a capture object for the configured stream."""
+        res_map = {"480p": (640, 480), "720p": (1280, 720), "1080p": (1920, 1080)}
+        width = height = None
+        if self.resolution != "original":
+            width, height = res_map.get(self.resolution, (None, None))
+        try:
+            cap = FFmpegCameraStream(self.src, width, height)
+            if cap.isOpened():
+                logger.info(f"[{self.cam_id}] Using FFmpegCameraStream")
+                return cap
+            logger.warning(f"[{self.cam_id}] FFmpeg stream failed, falling back to cv2")
+        except Exception as e:
+            logger.error(f"[{self.cam_id}] FFmpeg init error: {e}; falling back to cv2")
+        if self.src_type == "local":
             try:
                 index = int(self.src)
             except ValueError:
@@ -208,24 +196,22 @@ class PersonTracker:
             cap = cv2.VideoCapture(index)
         else:
             cap = cv2.VideoCapture(self.src)
-        if self.resolution != "original":
-            res_map = {
-                "480p": (640, 480),
-                "720p": (1280, 720),
-                "1080p": (1920, 1080),
-            }
-            if self.resolution in res_map:
-                w, h = res_map[self.resolution]
-                cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
-                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+        if self.resolution != "original" and self.resolution in res_map:
+            w, h = res_map[self.resolution]
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+        logger.info(f"[{self.cam_id}] Using cv2.VideoCapture")
         return cap
-
     def capture_loop(self):
         failures = 0
+        register_thread(f"Tracker-{self.cam_id}-capture")
         while self.running:
             try:
                 cap = self._open_capture()
-                using_ffmpeg = hasattr(cap, "stdout")
+                using_ffmpeg = isinstance(cap, FFmpegCameraStream)
+                logger.info(
+                    f"[{self.cam_id}] capture using {'ffmpeg' if using_ffmpeg else 'cv2'}"
+                )
                 if not using_ffmpeg and not cap.isOpened():
                     logger.warning(f"[{self.cam_id}] Camera stream could not be opened: {self.src}")
                     failures += 1
@@ -243,27 +229,13 @@ class PersonTracker:
                 logger.info(f"Stream opened: {self.src}")
                 width = height = None
                 if using_ffmpeg:
-                    if self.resolution != "original":
-                        res_map = {"480p": (640,480), "720p": (1280,720), "1080p": (1920,1080)}
-                        width, height = res_map.get(self.resolution, (None, None))
-                    else:
-                        probe = cv2.VideoCapture(self.src, cv2.CAP_FFMPEG)
-                        if probe.isOpened():
-                            ret, fr = probe.read()
-                            if ret:
-                                height, width = fr.shape[:2]
-                        probe.release()
+                    width, height = cap.width, cap.height
                 while self.running:
                     try:
                         if using_ffmpeg:
-                            if width is None or height is None:
-                                width = 640
-                                height = 480
-                            raw = cap.stdout.read(width * height * 3)
-                            if len(raw) < width * height * 3:
+                            ret, frame = cap.read()
+                            if not ret:
                                 raise RuntimeError("ffmpeg_eof")
-                            import numpy as np
-                            frame = np.frombuffer(raw, dtype="uint8").reshape(height, width, 3)
                         else:
                             ret, frame = cap.read()
                             if not ret:
@@ -271,21 +243,27 @@ class PersonTracker:
                     except Exception as e:
                         logger.error(f"Stream read error: {e}")
                         ret = False
-                    if not using_ffmpeg and not ret:
-                        logger.warning(f"Lost stream, retry in {self.retry_interval}s")
+                    if not ret:
                         failures += 1
+                        if using_ffmpeg:
+                            logger.warning(
+                                f"Lost ffmpeg stream, retry in {self.retry_interval}s"
+                            )
+                        else:
+                            logger.warning(
+                                f"Lost stream, retry in {self.retry_interval}s"
+                            )
                         if failures >= self.max_retry:
-                            logger.error(f"Max retries reached for {self.src}. stopping tracker")
+                            logger.error(
+                                f"Max retries reached for {self.src}. stopping tracker"
+                            )
                             self.running = False
                             break
                         break
                     if self.frame_queue.full():
                         _ = self.frame_queue.get()
                     self.frame_queue.put(frame)
-                if using_ffmpeg:
-                    cap.kill()
-                else:
-                    cap.release()
+                cap.release()
             except (ConnectionResetError, OSError) as e:
                 self.online = False
                 if isinstance(e, ConnectionResetError) or getattr(e, 'winerror', None) == 10054:
@@ -301,6 +279,7 @@ class PersonTracker:
 
     def process_loop(self):
         idx = 0
+        register_thread(f"Tracker-{self.cam_id}-process")
         while self.running or not self.frame_queue.empty():
             try:
                 frame = self.frame_queue.get(timeout=1)
@@ -330,7 +309,7 @@ class PersonTracker:
                 logger.info("Daily counts reset")
             if self.skip_frames and idx % self.skip_frames:
                 continue
-            res = self.model_person.predict(frame, device=self.device, verbose=False)[0]
+            res = profile_predict(self.model_person, f"Tracker-{self.cam_id}", frame, device=self.device, verbose=False)[0]
             h, w = frame.shape[:2]
             if self.line_orientation == 'horizontal':
                 line_pos = int(h * self.line_ratio)

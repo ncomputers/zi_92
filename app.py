@@ -1,3 +1,4 @@
+#app.py
 """Crowd management system version 78."""
 from __future__ import annotations
 
@@ -16,6 +17,7 @@ from loguru import logger
 import uvicorn
 import redis
 import cv2
+from modules.profiler import start_profiler
 import torch
 import sys
 
@@ -116,6 +118,7 @@ def init_app():
                              lambda: broadcast_stats(trackers, redis_client_local))
     ppe_worker.start()
 
+    start_profiler(cfg)
     # set globals
     globals().update(config=cfg, config_path=config_path_local, redis_client=redis_client_local, cameras=cams, ppe_worker=ppe_worker)
 

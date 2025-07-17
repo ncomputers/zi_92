@@ -16,3 +16,5 @@ passlib
 pytest
 fakeredis
 setuptools<81
+psutil
+numpy
