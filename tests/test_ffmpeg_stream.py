@@ -64,3 +64,4 @@ def test_ffmpeg_stream_restart(monkeypatch):
     assert frame is None
     # called once on init and once on short read
     assert calls >= 2
+

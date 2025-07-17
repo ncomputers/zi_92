@@ -1,4 +1,5 @@
 #ffmpeg_stream.py
+
 import subprocess
 import numpy as np
 from typing import Optional
@@ -73,6 +74,7 @@ class FFmpegCameraStream:
         if len(raw) < self.frame_size:
             self.release()
             self._start_process()
+
             return False, None
         frame = np.frombuffer(raw, dtype="uint8").reshape(self.height, self.width, 3)
         return True, frame

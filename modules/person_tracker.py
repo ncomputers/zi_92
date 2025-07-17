@@ -189,6 +189,7 @@ class PersonTracker:
         except Exception as e:
             logger.error(f"[{self.cam_id}] FFmpeg init error: {e}; falling back to cv2")
         if self.src_type == "local":
+
             try:
                 index = int(self.src)
             except ValueError:
@@ -201,6 +202,7 @@ class PersonTracker:
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
         logger.info(f"[{self.cam_id}] Using cv2.VideoCapture")
+
         return cap
     def capture_loop(self):
         failures = 0
@@ -212,6 +214,7 @@ class PersonTracker:
                 logger.info(
                     f"[{self.cam_id}] capture using {'ffmpeg' if using_ffmpeg else 'cv2'}"
                 )
+
                 if not using_ffmpeg and not cap.isOpened():
                     logger.warning(f"[{self.cam_id}] Camera stream could not be opened: {self.src}")
                     failures += 1
