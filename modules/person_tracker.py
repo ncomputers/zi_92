@@ -189,7 +189,6 @@ class PersonTracker:
         except Exception as e:
             logger.error(f"[{self.cam_id}] FFmpeg init error: {e}; falling back to cv2")
         if self.src_type == "local":
-
             try:
                 index = int(self.src)
             except ValueError:
@@ -202,7 +201,6 @@ class PersonTracker:
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
         logger.info(f"[{self.cam_id}] Using cv2.VideoCapture")
-
         return cap
     def capture_loop(self):
         failures = 0
@@ -246,11 +244,20 @@ class PersonTracker:
                     except Exception as e:
                         logger.error(f"Stream read error: {e}")
                         ret = False
-                    if not using_ffmpeg and not ret:
-                        logger.warning(f"Lost stream, retry in {self.retry_interval}s")
+                    if not ret:
                         failures += 1
+                        if using_ffmpeg:
+                            logger.warning(
+                                f"Lost ffmpeg stream, retry in {self.retry_interval}s"
+                            )
+                        else:
+                            logger.warning(
+                                f"Lost stream, retry in {self.retry_interval}s"
+                            )
                         if failures >= self.max_retry:
-                            logger.error(f"Max retries reached for {self.src}. stopping tracker")
+                            logger.error(
+                                f"Max retries reached for {self.src}. stopping tracker"
+                            )
                             self.running = False
                             break
                         break
