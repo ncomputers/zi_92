@@ -110,6 +110,7 @@ class PersonTracker:
             if d.isoformat() != today:
                 self.redis.mset({count_key: 0, date_key: today})
         self.snap_dir = SNAP_DIR
+        self.raw_frame = None
         self.output_frame = None
         self.running = True
 
@@ -212,7 +213,6 @@ class PersonTracker:
                 logger.info(
                     f"[{self.cam_id}] capture using {'ffmpeg' if using_ffmpeg else 'cv2'}"
                 )
-
                 if not using_ffmpeg and not cap.isOpened():
                     logger.warning(f"[{self.cam_id}] Camera stream could not be opened: {self.src}")
                     failures += 1
@@ -263,6 +263,8 @@ class PersonTracker:
                         break
                     if self.frame_queue.full():
                         _ = self.frame_queue.get()
+                    with lock:
+                        self.raw_frame = frame.copy()
                     self.frame_queue.put(frame)
                 cap.release()
             except (ConnectionResetError, OSError) as e:

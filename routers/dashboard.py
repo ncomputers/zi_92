@@ -79,6 +79,27 @@ async def video_feed(cam_id: int, request: Request):
             await asyncio.sleep(1 / tr.fps)
     return StreamingResponse(gen(), media_type='multipart/x-mixed-replace; boundary=frame')
 
+@router.get('/raw_feed/{cam_id}')
+async def raw_feed(cam_id: int, request: Request):
+    res = require_roles(request, ['admin','viewer'])
+    if isinstance(res, RedirectResponse):
+        return res
+    tr = trackers_map.get(cam_id)
+    if not tr:
+        return HTMLResponse('Not found', status_code=404)
+
+    async def gen():
+        while True:
+            with lock:
+                frame = tr.raw_frame
+            if frame is None:
+                await asyncio.sleep(0.1)
+                continue
+            _, buf = cv2.imencode('.jpg', frame)
+            yield b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buf.tobytes() + b'\r\n'
+            await asyncio.sleep(1 / tr.fps)
+    return StreamingResponse(gen(), media_type='multipart/x-mixed-replace; boundary=frame')
+
 @router.websocket('/ws/stats')
 async def ws_stats(ws: WebSocket):
     await ws.accept()

@@ -15,6 +15,7 @@ still available.
 - **Counting and alerts**: Tracks entries/exits and can send email alerts based on customizable rules.
 - **Duplicate frame filter**: Skips nearly identical frames to reduce GPU/CPU load.
 - **Dashboard and reports**: Live counts, recent anomalies, and historical reports are available in the web interface.
+- **Live feed optimization**: Dashboard streams the raw camera feed via `/raw_feed` while analysis runs separately.
 - **Per-camera resolution**: Choose 480p, 720p, 1080p, or original when adding a camera.
 - **Camera status**: Online/offline indicators appear in the Cameras page for quick troubleshooting.
 - **Secure logins**: User passwords are stored as PBKDF2 hashes and verified using passlib.
