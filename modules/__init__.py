@@ -1,6 +1,8 @@
+#__init__.py
 
-"""Expose tracker class at package level for easy imports."""
+"""Module package."""
 
-from .person_tracker import PersonTracker
+# Avoid importing heavy modules at package import time.  Individual modules
+# such as ``person_tracker`` should be imported by consumers as needed.
 
-__all__ = ["PersonTracker"]
+__all__ = []

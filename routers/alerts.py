@@ -1,3 +1,4 @@
+#alerts.py
 """Email and alert rule management routes."""
 from __future__ import annotations
 from typing import Dict
