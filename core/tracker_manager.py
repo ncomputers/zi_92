@@ -1,3 +1,4 @@
+#tracker_manager.py
 """Manage PersonTracker instances and related counters."""
 from __future__ import annotations
 import json
