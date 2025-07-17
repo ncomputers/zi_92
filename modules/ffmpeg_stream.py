@@ -67,9 +67,14 @@ class FFmpegCameraStream:
 
     def read(self):
         if not self.isOpened():
+            self.release()
+            self._start_process()
             return False, None
         raw = self.proc.stdout.read(self.frame_size)
         if len(raw) < self.frame_size:
+            self.release()
+            self._start_process()
+
             return False, None
         frame = np.frombuffer(raw, dtype="uint8").reshape(self.height, self.width, 3)
         return True, frame

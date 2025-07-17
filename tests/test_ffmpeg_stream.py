@@ -40,3 +40,28 @@ def test_ffmpeg_stream_read(monkeypatch):
     assert isinstance(frame, np.ndarray)
     assert frame.shape == (2, 2, 3)
     stream.release()
+
+
+class DummyPopenEOF(DummyPopen):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # return less than frame size to trigger restart
+        self.stdout = io.BytesIO(b"\x00\x01")
+
+
+def test_ffmpeg_stream_restart(monkeypatch):
+    calls = 0
+
+    def fake_start(self):
+        nonlocal calls
+        calls += 1
+        self.proc = DummyPopenEOF()
+
+    monkeypatch.setattr(FFmpegCameraStream, "_start_process", fake_start)
+    stream = FFmpegCameraStream("rtsp://test", width=2, height=2)
+    ret, frame = stream.read()
+    assert not ret
+    assert frame is None
+    # called once on init and once on short read
+    assert calls >= 2
+
