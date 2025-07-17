@@ -212,6 +212,7 @@ class PersonTracker:
                 logger.info(
                     f"[{self.cam_id}] capture using {'ffmpeg' if using_ffmpeg else 'cv2'}"
                 )
+
                 if not using_ffmpeg and not cap.isOpened():
                     logger.warning(f"[{self.cam_id}] Camera stream could not be opened: {self.src}")
                     failures += 1
