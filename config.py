@@ -1,3 +1,4 @@
+#config.py
 # Global configuration object to share across modules
 config = {}
 

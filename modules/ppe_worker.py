@@ -1,5 +1,7 @@
+#ppe_worker.py
 import time
 import json
+from modules.profiler import register_thread, profile_predict
 import threading
 from pathlib import Path
 import cv2
@@ -34,6 +36,7 @@ class PPEDetector(threading.Thread):
 
 
     def run(self):
+        register_thread("PPEWorker")
         while self.running:
             entries = [
                 json.loads(e)
@@ -52,7 +55,7 @@ class PPEDetector(threading.Thread):
                 img = cv2.imread(str(img_path))
                 if img is None:
                     continue
-                res = self.model.predict(img, device=self.device, verbose=False)[0]
+                res = profile_predict(self.model, "PPEWorker", img, device=self.device, verbose=False)[0]
                 scores = {}
                 for *xyxy, conf, cls in res.boxes.data.tolist():
                     label = self.model.names[int(cls)]
