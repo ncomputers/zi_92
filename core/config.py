@@ -78,6 +78,8 @@ def load_config(path: str, r: redis.Redis) -> dict:
         data.setdefault("preview_anomalies", [])
         data.setdefault("email_enabled", True)
         data.setdefault("show_track_lines", False)
+        data.setdefault("enable_profiling", False)
+        data.setdefault("profiling_interval", 5)
         data.setdefault("duplicate_filter_enabled", False)
         data.setdefault("duplicate_filter_threshold", 0.1)
         data.setdefault("duplicate_bypass_seconds", 2)

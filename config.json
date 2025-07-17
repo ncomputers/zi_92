@@ -14,6 +14,8 @@
   "detect_helmet_color": false,
   "show_lines": true,
   "show_ids": true,
+  "enable_profiling": true,
+  "profiling_interval": 5,
   "max_capacity": 500,
   "warn_threshold": 80,
   "track_ppe": [
