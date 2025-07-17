@@ -176,13 +176,20 @@ class PersonTracker:
 
     def _open_capture(self):
         """Return a capture object for the configured stream."""
-        if self.src_type == "rtsp":
-            res_map = {"480p": (640, 480), "720p": (1280, 720), "1080p": (1920, 1080)}
-            width = height = None
-            if self.resolution != "original":
-                width, height = res_map.get(self.resolution, (None, None))
-            return FFmpegCameraStream(self.src, width, height)
-        elif self.src_type == "local":
+        res_map = {"480p": (640, 480), "720p": (1280, 720), "1080p": (1920, 1080)}
+        width = height = None
+        if self.resolution != "original":
+            width, height = res_map.get(self.resolution, (None, None))
+        try:
+            cap = FFmpegCameraStream(self.src, width, height)
+            if cap.isOpened():
+                logger.info(f"[{self.cam_id}] Using FFmpegCameraStream")
+                return cap
+            logger.warning(f"[{self.cam_id}] FFmpeg stream failed, falling back to cv2")
+        except Exception as e:
+            logger.error(f"[{self.cam_id}] FFmpeg init error: {e}; falling back to cv2")
+        if self.src_type == "local":
+
             try:
                 index = int(self.src)
             except ValueError:
@@ -190,12 +197,12 @@ class PersonTracker:
             cap = cv2.VideoCapture(index)
         else:
             cap = cv2.VideoCapture(self.src)
-        if self.resolution != "original":
-            res_map = {"480p": (640, 480), "720p": (1280, 720), "1080p": (1920, 1080)}
-            if self.resolution in res_map:
-                w, h = res_map[self.resolution]
-                cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
-                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+        if self.resolution != "original" and self.resolution in res_map:
+            w, h = res_map[self.resolution]
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+        logger.info(f"[{self.cam_id}] Using cv2.VideoCapture")
+
         return cap
     def capture_loop(self):
         failures = 0
@@ -204,6 +211,10 @@ class PersonTracker:
             try:
                 cap = self._open_capture()
                 using_ffmpeg = isinstance(cap, FFmpegCameraStream)
+                logger.info(
+                    f"[{self.cam_id}] capture using {'ffmpeg' if using_ffmpeg else 'cv2'}"
+                )
+
                 if not using_ffmpeg and not cap.isOpened():
                     logger.warning(f"[{self.cam_id}] Camera stream could not be opened: {self.src}")
                     failures += 1
