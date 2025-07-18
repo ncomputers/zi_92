@@ -1,7 +1,7 @@
 #ppe_worker.py
 import time
 import json
-from modules.profiler import register_thread, profile_predict
+from modules.profiler import register_thread, profile_predict, log_resource_usage
 import threading
 from pathlib import Path
 import cv2
@@ -34,9 +34,17 @@ class PPEDetector(threading.Thread):
         self.running = True
         self.update_callback = update_callback
 
+    @staticmethod
+    def _clean_label(name: str) -> str:
+        """Normalize labels to lowercase with underscores."""
+        return name.lower().replace(" ", "_").replace("-", "_").replace("/", "_")
+
 
     def run(self):
         register_thread("PPEWorker")
+        frame_idx = 0
+        last_log = time.time()
+        skip = int(self.cfg.get("skip_frames", 0))
         while self.running:
             entries = [
                 json.loads(e)
@@ -55,14 +63,19 @@ class PPEDetector(threading.Thread):
                 img = cv2.imread(str(img_path))
                 if img is None:
                     continue
+                frame_idx += 1
+                if skip and frame_idx % skip:
+                    continue
                 res = profile_predict(self.model, "PPEWorker", img, device=self.device, verbose=False)[0]
                 scores = {}
                 for *xyxy, conf, cls in res.boxes.data.tolist():
-                    label = self.model.names[int(cls)]
+                    label = self._clean_label(self.model.names[int(cls)])
                     if conf > scores.get(label, 0):
                         scores[label] = conf
+                logger.debug(f"PPE scores: {scores}")
                 for item in self.cfg.get("track_ppe", []):
-                    conf = scores.get(item, 0)
+                    key = self._clean_label(item)
+                    conf = scores.get(key, 0)
                     status = item if conf >= self.cfg.get("helmet_conf_thresh", 0.5) else f"no_{item}"
                     ts = int(time.time())
                     log = {
@@ -78,4 +91,11 @@ class PPEDetector(threading.Thread):
                         self.redis.incr(f"{status}_count")
                     if self.update_callback:
                         self.update_callback()
+            if time.time() - last_log > 10:
+                logger.debug(
+                    f"PPEWorker processed {frame_idx} frames in {time.time() - last_log:.1f}s"
+                )
+                log_resource_usage("PPEWorker")
+                frame_idx = 0
+                last_log = time.time()
             time.sleep(1)

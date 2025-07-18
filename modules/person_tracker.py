@@ -8,7 +8,7 @@ from datetime import date, datetime
 import cv2
 from .ffmpeg_stream import FFmpegCameraStream
 import torch
-from modules.profiler import register_thread, profile_predict
+from modules.profiler import register_thread, profile_predict, log_resource_usage
 from loguru import logger
 from ultralytics import YOLO
 from deep_sort_realtime.deepsort_tracker import DeepSort
@@ -21,11 +21,20 @@ from core.config import ANOMALY_ITEMS, COUNT_GROUPS, PPE_ITEMS
 class PersonTracker:
     """Tracks entry and exit counts using YOLOv8 and DeepSORT."""
 
-    def __init__(self, cam_id: int, src: str, classes: list[str], cfg: dict,
-                 tasks: list[str] | None = None,
-                 src_type: str = "http", line_orientation: str | None = None,
-                 reverse: bool = False, resolution: str = "original",
-                 update_callback=None):
+    def __init__(
+        self,
+        cam_id: int,
+        src: str,
+        classes: list[str],
+        cfg: dict,
+        tasks: list[str] | None = None,
+        src_type: str = "http",
+        line_orientation: str | None = None,
+        reverse: bool = False,
+        resolution: str = "original",
+        rtsp_transport: str = "tcp",
+        update_callback=None,
+    ):
         self.cfg = cfg
         for k, v in cfg.items():
             setattr(self, k, v)
@@ -40,6 +49,7 @@ class PersonTracker:
         self.line_orientation = line_orientation or cfg.get("line_orientation", "vertical")
         self.reverse = reverse
         self.resolution = resolution
+        self.rtsp_transport = rtsp_transport
         self.helmet_conf_thresh = cfg.get("helmet_conf_thresh", 0.5)
         self.detect_helmet_color = cfg.get("detect_helmet_color", False)
         self.track_misc = cfg.get("track_misc", True)
@@ -173,6 +183,8 @@ class PersonTracker:
                 self.model_person.model.to(self.device).half()
         if "email" in cfg:
             self.email_cfg = cfg["email"]
+        if "rtsp_transport" in cfg:
+            self.rtsp_transport = cfg["rtsp_transport"]
 
 
     def _open_capture(self):
@@ -181,22 +193,39 @@ class PersonTracker:
         width = height = None
         if self.resolution != "original":
             width, height = res_map.get(self.resolution, (None, None))
+        if self.src_type == "local":
+            try:
+                index = int(self.src) if str(self.src).isdigit() else self.src
+            except ValueError:
+                index = self.src
+            cap = cv2.VideoCapture(index)
+            if self.resolution != "original" and self.resolution in res_map:
+                w, h = res_map[self.resolution]
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+            logger.info(f"[{self.cam_id}] Using cv2.VideoCapture (local)")
+            return cap
+
         try:
-            cap = FFmpegCameraStream(self.src, width, height)
+            cap = FFmpegCameraStream(self.src, width, height, transport=self.rtsp_transport)
             if cap.isOpened():
-                logger.info(f"[{self.cam_id}] Using FFmpegCameraStream")
+                logger.info(f"[{self.cam_id}] Using FFmpegCameraStream ({self.rtsp_transport})")
                 return cap
             logger.warning(f"[{self.cam_id}] FFmpeg stream failed, falling back to cv2")
         except Exception as e:
             logger.error(f"[{self.cam_id}] FFmpeg init error: {e}; falling back to cv2")
-        if self.src_type == "local":
-            try:
-                index = int(self.src)
-            except ValueError:
-                index = self.src
-            cap = cv2.VideoCapture(index)
-        else:
-            cap = cv2.VideoCapture(self.src)
+            if self.src_type == "rtsp" and self.rtsp_transport == "tcp":
+                logger.info(f"[{self.cam_id}] retrying with UDP")
+                try:
+                    cap = FFmpegCameraStream(self.src, width, height, transport="udp")
+                    if cap.isOpened():
+                        self.rtsp_transport = "udp"
+                        logger.info(f"[{self.cam_id}] Using FFmpegCameraStream (udp)")
+                        return cap
+                except Exception as e2:
+                    logger.error(f"[{self.cam_id}] FFmpeg UDP init error: {e2}")
+
+        cap = cv2.VideoCapture(self.src)
         if self.resolution != "original" and self.resolution in res_map:
             w, h = res_map[self.resolution]
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
@@ -205,6 +234,9 @@ class PersonTracker:
         return cap
     def capture_loop(self):
         failures = 0
+        frame_idx = 0
+        idx_skip = 0
+        last_log = time.time()
         register_thread(f"Tracker-{self.cam_id}-capture")
         while self.running:
             try:
@@ -261,11 +293,27 @@ class PersonTracker:
                             self.running = False
                             break
                         break
+                    frame_idx += 1
+                    idx_skip += 1
+                    if self.skip_frames and idx_skip % self.skip_frames:
+                        if not using_ffmpeg:
+                            time.sleep(1 / self.fps)
+                        continue
                     if self.frame_queue.full():
                         _ = self.frame_queue.get()
                     with lock:
                         self.raw_frame = frame.copy()
                     self.frame_queue.put(frame)
+                    if not using_ffmpeg:
+                        time.sleep(1 / self.fps)
+                    if time.time() - last_log > 10:
+                        logger.debug(
+                            f"[{self.cam_id}] capture fps={frame_idx / (time.time() - last_log):.2f}"
+                        )
+                        log_resource_usage(f"Tracker-{self.cam_id}-capture")
+                        last_log = time.time()
+                        frame_idx = 0
+                        idx_skip = 0
                 cap.release()
             except (ConnectionResetError, OSError) as e:
                 self.online = False
@@ -282,6 +330,7 @@ class PersonTracker:
 
     def process_loop(self):
         idx = 0
+        last_proc = time.time()
         register_thread(f"Tracker-{self.cam_id}-process")
         while self.running or not self.frame_queue.empty():
             try:
@@ -369,9 +418,11 @@ class PersonTracker:
                         'images': [],
                         'first_zone': zone,
                         'trail': [(cx, cy)],
+                        'conf': 0.0,
                     }
                 prev = self.tracks[tid]
                 conf = getattr(tr, 'det_conf', 0) or 0
+                prev['conf'] = conf
                 if conf > prev.get('best_conf', 0):
                     crop = frame[y1:y2, x1:x2]
                     if crop.size:
@@ -559,7 +610,8 @@ class PersonTracker:
                             'track_id': tid,
                             'direction': direction,
                             'path': str(path),
-                            'needs_ppe': any(t in PPE_ITEMS for t in self.tasks)
+                            'needs_ppe': any(t in PPE_ITEMS for t in self.tasks),
+                            'det_conf': info.get('best_conf', 0)
                         }
                         self.redis.zadd('person_logs', {json.dumps(entry): cross_ts})
                         limit = self.cfg.get('ppe_log_limit', 1000)
@@ -570,6 +622,10 @@ class PersonTracker:
             cv2.putText(frame, f"Exiting: {self.out_count}", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
             with lock:
                 self.output_frame = frame.copy()
+            delta = time.time() - last_proc
+            last_proc = time.time()
+            logger.debug(f"[{self.cam_id}] process interval={delta:.3f}s")
+            log_resource_usage(f"Tracker-{self.cam_id}-process")
             time.sleep(1 / self.fps)
 
 

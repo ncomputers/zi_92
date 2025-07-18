@@ -98,6 +98,7 @@ def start_tracker(cam: dict, cfg: dict, trackers: Dict[int, PersonTracker], r: r
         line_orientation=cam.get("line_orientation", "vertical"),
         reverse=cam.get("reverse", False),
         resolution=cam.get("resolution", "original"),
+        rtsp_transport=cam.get("rtsp_transport", "tcp"),
         update_callback=_broadcast,
     )
     trackers[cam["id"]] = tr
