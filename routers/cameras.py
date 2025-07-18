@@ -8,6 +8,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse
 from modules.utils import require_roles
 import cv2
+from modules.ffmpeg_stream import FFmpegCameraStream
 
 from core.tracker_manager import start_tracker, stop_tracker, save_cameras
 from core.config import CAMERA_TASKS
@@ -58,6 +59,10 @@ async def add_camera(request: Request):
         tasks = ['in_count', 'out_count']
     if not url:
         return {'error': 'Missing URL'}
+    if url.isdigit() or url.startswith('/dev/'):
+        src_type = 'local'
+    elif url.startswith('rtsp://'):
+        src_type = 'rtsp'
     cam_id = max([c['id'] for c in cams], default=0) + 1
     cam = {
         'id': cam_id,
@@ -115,6 +120,13 @@ async def update_camera(cam_id: int, request: Request):
                 cam['tasks'] = tasks_upd
             if 'url' in data:
                 cam['url'] = data['url']
+                if 'type' not in data:
+                    if cam['url'].isdigit() or cam['url'].startswith('/dev/'):
+                        cam['type'] = 'local'
+                    elif cam['url'].startswith('rtsp://'):
+                        cam['type'] = 'rtsp'
+                    else:
+                        cam['type'] = 'http'
             if 'type' in data:
                 cam['type'] = data['type']
             if 'show' in data:
@@ -176,9 +188,18 @@ async def test_camera(request: Request):
     url = data.get('url')
     if not url:
         return {'error': 'missing url'}
-    cap = cv2.VideoCapture(int(url) if url.isdigit() else url)
-    ret, frame = cap.read()
-    cap.release()
+    if url.isdigit() or url.startswith('/dev/'):
+        cap = cv2.VideoCapture(int(url) if url.isdigit() else url)
+        ret, frame = cap.read()
+        cap.release()
+    else:
+        cap = FFmpegCameraStream(url, transport="tcp")
+        ret, frame = cap.read()
+        cap.release()
+        if not ret and url.startswith('rtsp://'):
+            cap = FFmpegCameraStream(url, transport="udp")
+            ret, frame = cap.read()
+            cap.release()
     if not ret:
         return {'error': 'unable to read'}
     _, buf = cv2.imencode('.jpg', frame)
