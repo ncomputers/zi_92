@@ -193,9 +193,14 @@ async def test_camera(request: Request):
         ret, frame = cap.read()
         cap.release()
     else:
-        cap = FFmpegCameraStream(url)
+        cap = FFmpegCameraStream(url, transport="tcp")
         ret, frame = cap.read()
         cap.release()
+        if not ret and url.startswith('rtsp://'):
+            cap = FFmpegCameraStream(url, transport="udp")
+            ret, frame = cap.read()
+            cap.release()
+
     if not ret:
         return {'error': 'unable to read'}
     _, buf = cv2.imencode('.jpg', frame)

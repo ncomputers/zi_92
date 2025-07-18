@@ -21,11 +21,20 @@ from core.config import ANOMALY_ITEMS, COUNT_GROUPS, PPE_ITEMS
 class PersonTracker:
     """Tracks entry and exit counts using YOLOv8 and DeepSORT."""
 
-    def __init__(self, cam_id: int, src: str, classes: list[str], cfg: dict,
-                 tasks: list[str] | None = None,
-                 src_type: str = "http", line_orientation: str | None = None,
-                 reverse: bool = False, resolution: str = "original",
-                 update_callback=None):
+    def __init__(
+        self,
+        cam_id: int,
+        src: str,
+        classes: list[str],
+        cfg: dict,
+        tasks: list[str] | None = None,
+        src_type: str = "http",
+        line_orientation: str | None = None,
+        reverse: bool = False,
+        resolution: str = "original",
+        rtsp_transport: str = "tcp",
+        update_callback=None,
+    ):
         self.cfg = cfg
         for k, v in cfg.items():
             setattr(self, k, v)
@@ -40,6 +49,7 @@ class PersonTracker:
         self.line_orientation = line_orientation or cfg.get("line_orientation", "vertical")
         self.reverse = reverse
         self.resolution = resolution
+        self.rtsp_transport = rtsp_transport
         self.helmet_conf_thresh = cfg.get("helmet_conf_thresh", 0.5)
         self.detect_helmet_color = cfg.get("detect_helmet_color", False)
         self.track_misc = cfg.get("track_misc", True)
@@ -173,6 +183,8 @@ class PersonTracker:
                 self.model_person.model.to(self.device).half()
         if "email" in cfg:
             self.email_cfg = cfg["email"]
+        if "rtsp_transport" in cfg:
+            self.rtsp_transport = cfg["rtsp_transport"]
 
 
     def _open_capture(self):
@@ -195,13 +207,24 @@ class PersonTracker:
             return cap
 
         try:
-            cap = FFmpegCameraStream(self.src, width, height)
+            cap = FFmpegCameraStream(self.src, width, height, transport=self.rtsp_transport)
             if cap.isOpened():
-                logger.info(f"[{self.cam_id}] Using FFmpegCameraStream")
+                logger.info(f"[{self.cam_id}] Using FFmpegCameraStream ({self.rtsp_transport})")
                 return cap
             logger.warning(f"[{self.cam_id}] FFmpeg stream failed, falling back to cv2")
         except Exception as e:
             logger.error(f"[{self.cam_id}] FFmpeg init error: {e}; falling back to cv2")
+            if self.src_type == "rtsp" and self.rtsp_transport == "tcp":
+                logger.info(f"[{self.cam_id}] retrying with UDP")
+                try:
+                    cap = FFmpegCameraStream(self.src, width, height, transport="udp")
+                    if cap.isOpened():
+                        self.rtsp_transport = "udp"
+                        logger.info(f"[{self.cam_id}] Using FFmpegCameraStream (udp)")
+                        return cap
+                except Exception as e2:
+                    logger.error(f"[{self.cam_id}] FFmpeg UDP init error: {e2}")
+
 
         cap = cv2.VideoCapture(self.src)
         if self.resolution != "original" and self.resolution in res_map:

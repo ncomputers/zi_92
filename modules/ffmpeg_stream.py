@@ -7,10 +7,17 @@ from typing import Optional
 class FFmpegCameraStream:
     """Camera stream using FFmpeg with NVDEC and mpdecimate."""
 
-    def __init__(self, url: str, width: Optional[int] = None, height: Optional[int] = None):
+    def __init__(
+        self,
+        url: str,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+        transport: str = "tcp",
+    ):
         self.url = url
         self.width = width
         self.height = height
+        self.transport = transport
         if self.width is None or self.height is None:
             self._probe_dimensions()
         self.frame_size = self.width * self.height * 3
@@ -45,7 +52,7 @@ class FFmpegCameraStream:
             "-hwaccel",
             "nvdec",
             "-rtsp_transport",
-            "tcp",
+            self.transport,
             "-i",
             self.url,
             "-vf",
