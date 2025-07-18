@@ -59,10 +59,10 @@ async def update_settings(request: Request):
     if data.get('password') != cfg.get('settings_password'):
         return {'saved': False, 'error': 'auth'}
     for key in [
-        'max_capacity','warn_threshold','fps','skip_frames','line_ratio','v_thresh','debounce','retry_interval','conf_thresh','helmet_conf_thresh','detect_helmet_color','show_lines','show_ids','show_track_lines','person_model','ppe_model','email_enabled','duplicate_filter_enabled','duplicate_filter_threshold','duplicate_bypass_seconds','max_retry']:
+        'max_capacity','warn_threshold','fps','skip_frames','line_ratio','v_thresh','debounce','retry_interval','conf_thresh','helmet_conf_thresh','detect_helmet_color','show_lines','show_ids','show_track_lines','person_model','ppe_model','email_enabled','duplicate_filter_enabled','duplicate_filter_threshold','duplicate_bypass_seconds','max_retry','enable_live_charts','chart_update_freq']:
         if key in data:
             val = data[key]
-            if key in ['detect_helmet_color','show_lines','show_ids','show_track_lines','email_enabled','duplicate_filter_enabled']:
+            if key in ['detect_helmet_color','show_lines','show_ids','show_track_lines','email_enabled','duplicate_filter_enabled','enable_live_charts']:
                 cfg[key] = bool(val) if isinstance(val, bool) else str(val).lower() == 'true'
             else:
                 cfg[key] = type(cfg.get(key, val))(val)
