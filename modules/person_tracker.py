@@ -181,6 +181,19 @@ class PersonTracker:
         width = height = None
         if self.resolution != "original":
             width, height = res_map.get(self.resolution, (None, None))
+        if self.src_type == "local":
+            try:
+                index = int(self.src) if str(self.src).isdigit() else self.src
+            except ValueError:
+                index = self.src
+            cap = cv2.VideoCapture(index)
+            if self.resolution != "original" and self.resolution in res_map:
+                w, h = res_map[self.resolution]
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+            logger.info(f"[{self.cam_id}] Using cv2.VideoCapture (local)")
+            return cap
+
         try:
             cap = FFmpegCameraStream(self.src, width, height)
             if cap.isOpened():
@@ -189,14 +202,8 @@ class PersonTracker:
             logger.warning(f"[{self.cam_id}] FFmpeg stream failed, falling back to cv2")
         except Exception as e:
             logger.error(f"[{self.cam_id}] FFmpeg init error: {e}; falling back to cv2")
-        if self.src_type == "local":
-            try:
-                index = int(self.src)
-            except ValueError:
-                index = self.src
-            cap = cv2.VideoCapture(index)
-        else:
-            cap = cv2.VideoCapture(self.src)
+
+        cap = cv2.VideoCapture(self.src)
         if self.resolution != "original" and self.resolution in res_map:
             w, h = res_map[self.resolution]
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
