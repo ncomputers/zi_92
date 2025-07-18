@@ -12,8 +12,8 @@
   "conf_thresh": 0.3,
   "helmet_conf_thresh": 0.5,
   "detect_helmet_color": false,
-  "show_lines": true,
-  "show_ids": true,
+  "show_lines": false,
+  "show_ids": false,
   "enable_profiling": true,
   "profiling_interval": 5,
   "max_capacity": 500,
@@ -63,5 +63,15 @@
   "settings_password": "000",
   "max_retry": 5,
   "logo_url": "static/logo1.png",
-  "logo2_path": "static/logo2.png"
+  "logo2_path": "static/logo2.png",
+  "object_classes": [
+    "person"
+  ],
+  "ppe_classes": [
+    "helmet",
+    "no_helmet"
+  ],
+  "count_classes": [
+    "person"
+  ]
 }
