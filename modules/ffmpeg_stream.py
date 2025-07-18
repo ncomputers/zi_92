@@ -49,6 +49,7 @@ class FFmpegCameraStream:
     def _start_process(self) -> None:
         cmd = [
             "ffmpeg",
+            "-re",
             "-hwaccel",
             "nvdec",
             "-rtsp_transport",

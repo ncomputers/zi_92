@@ -8,7 +8,7 @@ from datetime import date, datetime
 import cv2
 from .ffmpeg_stream import FFmpegCameraStream
 import torch
-from modules.profiler import register_thread, profile_predict
+from modules.profiler import register_thread, profile_predict, log_resource_usage
 from loguru import logger
 from ultralytics import YOLO
 from deep_sort_realtime.deepsort_tracker import DeepSort
@@ -235,6 +235,9 @@ class PersonTracker:
         return cap
     def capture_loop(self):
         failures = 0
+        frame_idx = 0
+        idx_skip = 0
+        last_log = time.time()
         register_thread(f"Tracker-{self.cam_id}-capture")
         while self.running:
             try:
@@ -291,11 +294,27 @@ class PersonTracker:
                             self.running = False
                             break
                         break
+                    frame_idx += 1
+                    idx_skip += 1
+                    if self.skip_frames and idx_skip % self.skip_frames:
+                        if not using_ffmpeg:
+                            time.sleep(1 / self.fps)
+                        continue
                     if self.frame_queue.full():
                         _ = self.frame_queue.get()
                     with lock:
                         self.raw_frame = frame.copy()
                     self.frame_queue.put(frame)
+                    if not using_ffmpeg:
+                        time.sleep(1 / self.fps)
+                    if time.time() - last_log > 10:
+                        logger.debug(
+                            f"[{self.cam_id}] capture fps={frame_idx / (time.time() - last_log):.2f}"
+                        )
+                        log_resource_usage(f"Tracker-{self.cam_id}-capture")
+                        last_log = time.time()
+                        frame_idx = 0
+                        idx_skip = 0
                 cap.release()
             except (ConnectionResetError, OSError) as e:
                 self.online = False
@@ -312,6 +331,7 @@ class PersonTracker:
 
     def process_loop(self):
         idx = 0
+        last_proc = time.time()
         register_thread(f"Tracker-{self.cam_id}-process")
         while self.running or not self.frame_queue.empty():
             try:
@@ -399,9 +419,11 @@ class PersonTracker:
                         'images': [],
                         'first_zone': zone,
                         'trail': [(cx, cy)],
+                        'conf': 0.0,
                     }
                 prev = self.tracks[tid]
                 conf = getattr(tr, 'det_conf', 0) or 0
+                prev['conf'] = conf
                 if conf > prev.get('best_conf', 0):
                     crop = frame[y1:y2, x1:x2]
                     if crop.size:
@@ -589,7 +611,8 @@ class PersonTracker:
                             'track_id': tid,
                             'direction': direction,
                             'path': str(path),
-                            'needs_ppe': any(t in PPE_ITEMS for t in self.tasks)
+                            'needs_ppe': any(t in PPE_ITEMS for t in self.tasks),
+                            'det_conf': info.get('best_conf', 0)
                         }
                         self.redis.zadd('person_logs', {json.dumps(entry): cross_ts})
                         limit = self.cfg.get('ppe_log_limit', 1000)
@@ -600,6 +623,10 @@ class PersonTracker:
             cv2.putText(frame, f"Exiting: {self.out_count}", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
             with lock:
                 self.output_frame = frame.copy()
+            delta = time.time() - last_proc
+            last_proc = time.time()
+            logger.debug(f"[{self.cam_id}] process interval={delta:.3f}s")
+            log_resource_usage(f"Tracker-{self.cam_id}-process")
             time.sleep(1 / self.fps)
 
 
