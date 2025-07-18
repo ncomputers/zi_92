@@ -44,6 +44,8 @@
   "preview_anomalies": [],
   "email_enabled": true,
   "show_track_lines": false,
+  "enable_live_charts": true,
+  "chart_update_freq": 5,
   "duplicate_filter_enabled": false,
   "duplicate_filter_threshold": 2,
   "duplicate_bypass_seconds": 2,

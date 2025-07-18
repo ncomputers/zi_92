@@ -121,7 +121,7 @@ async def ws_stats(ws: WebSocket):
             handle_status_change(status, redis)
             anomaly_counts = {item: int(redis.get(f'{item}_count') or 0) for item in ANOMALY_ITEMS}
             await ws.send_json({'in_count': in_c, 'out_count': out_c, 'current': current, 'max_capacity': max_cap, 'status': status, 'anomaly_counts': anomaly_counts, 'group_counts': group_counts})
-            await asyncio.sleep(1)
+            await asyncio.sleep(cfg.get('chart_update_freq', 5))
     except WebSocketDisconnect:
         pass
 

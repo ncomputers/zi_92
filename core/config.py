@@ -79,6 +79,8 @@ def load_config(path: str, r: redis.Redis) -> dict:
         data.setdefault("preview_anomalies", [])
         data.setdefault("email_enabled", True)
         data.setdefault("show_track_lines", False)
+        data.setdefault("enable_live_charts", True)
+        data.setdefault("chart_update_freq", 5)
         data.setdefault("enable_profiling", False)
         data.setdefault("profiling_interval", 5)
         data.setdefault("duplicate_filter_enabled", False)

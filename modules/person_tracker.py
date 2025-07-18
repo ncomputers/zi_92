@@ -224,6 +224,7 @@ class PersonTracker:
                         return cap
                 except Exception as e2:
                     logger.error(f"[{self.cam_id}] FFmpeg UDP init error: {e2}")
+
         cap = cv2.VideoCapture(self.src)
         if self.resolution != "original" and self.resolution in res_map:
             w, h = res_map[self.resolution]
