@@ -5,6 +5,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.2/dist/flatly/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
     <style>
         body{padding-top:70px;background:#f7f7f7;}
         .stat-box{border-radius:.5rem;color:#fff;padding:0.8rem;margin-bottom:0.8rem;min-height:110px;display:flex;flex-direction:column;justify-content:center;}
@@ -98,6 +99,7 @@
             'no_dust_mask':'fa-head-side-mask',
             'no_face_shield':'fa-user-shield',
             'no_vest_jacket':'fa-tshirt'
+
         } %}
         {% for item in cfg.alert_anomalies %}
         {% if item.startswith('no_') %}
