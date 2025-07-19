@@ -5,7 +5,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.2/dist/flatly/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/static/js/chart.min.js"></script>
 
     <style>
         body{padding-top:70px;background:#f7f7f7;}
@@ -24,6 +24,7 @@
 </head>
 <body>
 {% include 'partials/header.html' %}
+<div id="wsStatus" class="text-center text-danger small"></div>
 <div class="container-fluid text-center mt-3">
     {% if 'person' in cfg.track_objects %}
     <div class="row g-3 justify-content-center mb-3">
@@ -52,7 +53,6 @@
                 <h4>People Exited</h4>
                 <div class="display-6" id="out_count">{{group_counts.get('person', {}).get('out', 0)}}</div>
                 <canvas id="out_chart" class="trend-chart" {% if not cfg.enable_live_charts %}style="display:none"{% endif %}></canvas>
-
             </div>
         </div>
     </div>
@@ -65,7 +65,6 @@
                 <h4>Vehicles Inside</h4>
                 <div class="display-4" id="vehicle_current">{{group_counts.get('vehicle', {}).get('current',0)}}</div>
                 <canvas id="vehicle_current_chart" class="trend-chart" {% if not cfg.enable_live_charts %}style="display:none"{% endif %}></canvas>
-
             </div>
         </div>
         <div class="col-md-3">
@@ -74,7 +73,6 @@
                 <h4>Vehicles Entered</h4>
                 <div class="display-6" id="vehicle_in">{{group_counts.get('vehicle', {}).get('in',0)}}</div>
                 <canvas id="vehicle_in_chart" class="trend-chart" {% if not cfg.enable_live_charts %}style="display:none"{% endif %}></canvas>
-
             </div>
         </div>
         <div class="col-md-3">
@@ -83,7 +81,6 @@
                 <h4>Vehicles Exited</h4>
                 <div class="display-6" id="vehicle_out">{{group_counts.get('vehicle', {}).get('out',0)}}</div>
                 <canvas id="vehicle_out_chart" class="trend-chart" {% if not cfg.enable_live_charts %}style="display:none"{% endif %}></canvas>
-
             </div>
         </div>
     </div>
@@ -106,7 +103,6 @@
             'no_dust_mask':'fa-head-side-mask',
             'no_face_shield':'fa-user-shield',
             'no_vest_jacket':'fa-tshirt'
-
         } %}
         {% for item in cfg.alert_anomalies %}
         {% if item.startswith('no_') %}
@@ -116,7 +112,6 @@
                 <h4>{{item.replace('no_','No ').replace('_',' ')}}</h4>
                 <div class="display-6" id="{{item}}_count">{{anomaly_counts[item]}}</div>
                 <canvas id="{{item}}_chart" class="trend-chart" {% if not cfg.enable_live_charts %}style="display:none"{% endif %}></canvas>
-
             </div>
         </div>
         {% endif %}
@@ -152,9 +147,12 @@
 <script>
 const enableCharts={{ 'true' if cfg.enable_live_charts else 'false' }};
 const updateFreq={{ cfg.chart_update_freq }};
-
 const ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/ws/stats`);
-ws.onclose=()=>setTimeout(()=>location.reload(),5000);
+const statusEl=document.getElementById('wsStatus');
+statusEl.textContent='Connecting...';
+ws.onopen=()=>{statusEl.textContent='';};
+ws.onerror=()=>{statusEl.textContent='Live update connection failed';};
+ws.onclose=()=>{statusEl.textContent='Connection lost. Retrying...';setTimeout(()=>location.reload(),5000);};
 let chart;
 let liveChart;
 const sparkCharts={};
@@ -188,7 +186,6 @@ if(enableCharts){
   initChart(maxCap);
   initLive();
 }
-
 function initSparklines(){
   sparkCharts.in_count=makeSpark('in_chart','green');
   sparkCharts.out_count=makeSpark('out_chart','red');
@@ -203,7 +200,6 @@ function initSparklines(){
 if(enableCharts){
   initSparklines();
 }
-
 function updateSpark(key,val){
   const c=sparkCharts[key];
   if(!c) return;
