@@ -187,6 +187,18 @@
                             <input class="form-check-input" type="checkbox" name="show_track_lines" id="showTrackLines" {% if cfg.show_track_lines %}checked{% endif %}>
                             <label class="form-check-label" for="showTrackLines">Show Red Lines</label>
                         </div>
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" name="enable_live_charts" id="enableCharts" {% if cfg.enable_live_charts %}checked{% endif %}>
+                            <label class="form-check-label" for="enableCharts">Enable Live Dashboard Graphs</label>
+                        </div>
+                        <div class="mt-2">
+                            <label class="form-label">Live Update Frequency</label>
+                            <select class="form-select" name="chart_update_freq">
+                                {% for val,label in [(1,'1s'),(5,'5s'),(30,'30s'),(60,'1 min'),(300,'5 min')] %}
+                                <option value="{{val}}" {% if cfg.chart_update_freq == val %}selected{% endif %}>{{label}}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -217,13 +229,15 @@ document.getElementById('cfgForm').addEventListener('submit',async e=>{
   obj.show_lines=form.get('show_lines')==='on';
   obj.show_ids=form.get('show_ids')==='on';
   obj.show_track_lines=form.get('show_track_lines')==='on';
+  obj.enable_live_charts=form.get('enable_live_charts')==='on';
+  obj.chart_update_freq=parseFloat(form.get('chart_update_freq'));
   obj.email_enabled=form.get('email_enabled')==='on';
   obj.duplicate_filter_enabled=form.get('duplicate_filter_enabled')==='on';
   obj.duplicate_filter_threshold=parseFloat(form.get('duplicate_filter_threshold'));
   obj.duplicate_bypass_seconds=parseFloat(form.get('duplicate_bypass_seconds'));
   obj.max_retry=parseFloat(form.get('max_retry'));
   obj.password=form.get('password');
-  for(const k of ['max_capacity','warn_threshold','fps','skip_frames','line_ratio','v_thresh','debounce','retry_interval','conf_thresh','helmet_conf_thresh','duplicate_filter_threshold','duplicate_bypass_seconds','max_retry']){if(k in obj) obj[k]=parseFloat(obj[k]);}
+  for(const k of ['max_capacity','warn_threshold','fps','skip_frames','line_ratio','v_thresh','debounce','retry_interval','conf_thresh','helmet_conf_thresh','duplicate_filter_threshold','duplicate_bypass_seconds','max_retry','chart_update_freq']){if(k in obj) obj[k]=parseFloat(obj[k]);}
   const r=await fetch('/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)});
   const d=await r.json();
   if(d.saved){document.getElementById('msg').innerHTML='<div class="alert alert-success">Saved</div>';} else {document.getElementById('msg').innerHTML='<div class="alert alert-danger">Error</div>';}
