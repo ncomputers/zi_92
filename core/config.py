@@ -79,6 +79,8 @@ def load_config(path: str, r: redis.Redis) -> dict:
         data.setdefault("preview_anomalies", [])
         data.setdefault("email_enabled", True)
         data.setdefault("show_track_lines", False)
+        data.setdefault("enable_live_charts", True)
+        data.setdefault("chart_update_freq", 5)
         data.setdefault("enable_profiling", False)
         data.setdefault("profiling_interval", 5)
         data.setdefault("duplicate_filter_enabled", False)
@@ -88,7 +90,14 @@ def load_config(path: str, r: redis.Redis) -> dict:
         data.setdefault("max_retry", 5)
         data.setdefault("person_model", "yolov8n.pt")
         data.setdefault("ppe_model", "mymodalv5.pt")
-        data.setdefault("logo_url", "static/logo1.png")
+        data.setdefault(
+            "logo_url",
+            "https://www.coromandel.biz/wp-content/uploads/2025/04/cropped-CIL-Logo_WB-02-1-300x100.png",
+        )
+        data.setdefault(
+            "logo2_url",
+            "https://www.coromandel.biz/wp-content/uploads/2025/02/murugappa-logo.png",
+        )
         data.setdefault("users", [
             {"username": "admin", "password": "rapidadmin", "role": "admin"},
             {"username": "viewer", "password": "viewer", "role": "viewer"}
