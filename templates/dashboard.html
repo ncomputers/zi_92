@@ -6,6 +6,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="/static/js/chart.min.js"></script>
+
     <style>
         body{padding-top:70px;background:#f7f7f7;}
         .stat-box{border-radius:.5rem;color:#fff;padding:0.8rem;margin-bottom:0.8rem;min-height:110px;display:flex;flex-direction:column;justify-content:center;}
@@ -33,6 +34,7 @@
                 <h4>People Inside</h4>
                 <div class="display-6" id="current_count">{{group_counts.get('person', {}).get('current', 0)}}</div>
                 <canvas id="current_chart" class="trend-chart" {% if not cfg.enable_live_charts %}style="display:none"{% endif %}></canvas>
+
                 <div id="status_msg" class="fw-bold">{{status}}</div>
             </div>
         </div>
@@ -42,6 +44,7 @@
                 <h4>People Entered</h4>
                 <div class="display-6" id="in_count">{{group_counts.get('person', {}).get('in', 0)}}</div>
                 <canvas id="in_chart" class="trend-chart" {% if not cfg.enable_live_charts %}style="display:none"{% endif %}></canvas>
+
             </div>
         </div>
         <div class="col-md-3">
